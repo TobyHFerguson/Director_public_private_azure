@@ -2,8 +2,8 @@ provider "azurerm" {
 }
 
 resource "azurerm_resource_group" "RG" {
-    name = "Training_2018_RG_2"
-    location = "West US 2"
+    name = "${var.RG}"
+    location = "East US"
 }
 
 resource "azurerm_network_security_group" "NSG" {
@@ -127,6 +127,159 @@ resource "azurerm_virtual_machine" "squid" {
     }
     storage_os_disk {
 	name = "root_disk"
+	create_option = "FromImage"
+	disk_size_gb = 100
+    }
+    // Get this using az vm image show --urn cloudera:cloudera-centos-os:7_4:2.0.7
+    plan {
+	name = "7_4",
+	product = "cloudera-centos-os",
+	publisher = "cloudera"
+    }
+
+    connection {
+	type     = "ssh"
+	user     = "centos"
+	private_key = "${file(var.private_key_path)}"
+    }
+
+    // copy the directory squid_scripts to /tmp/squid_scripts on the target machine
+    provisioner "file" {
+	source = "${path.module}/squid_scripts"
+	destination = "/tmp"
+    }
+
+    provisioner "remote-exec" {
+	inline = [
+	    "sudo chmod +x /tmp/squid_scripts/*.sh",
+	    "sudo /tmp/squid_scripts/provision_squid.sh ${var.PROXY_USER} ${var.PROXY_USER_PASSWORD} ${var.PROXY_PORT}",
+	    "sudo /tmp/squid_scripts/install_repos.sh",
+	    "sudo su -c 'echo ${azurerm_virtual_network.VNET.address_space[0]} allow >>/etc/chrony.conf'",
+	    "sudo systemctl restart chronyd"
+	]
+    }
+}
+
+resource "azurerm_public_ip" "director_ip" {
+    name = "director_ip"
+    location = "${azurerm_resource_group.RG.location}"
+    resource_group_name = "${azurerm_resource_group.RG.name}"
+    public_ip_address_allocation = "static"
+}
+
+resource "azurerm_network_interface" "director" {
+    name = "director-nic"
+    location = "${azurerm_resource_group.RG.location}"
+    resource_group_name = "${azurerm_resource_group.RG.name}"
+
+    ip_configuration {
+	name                          = "director-ip"
+	subnet_id                     = "${azurerm_subnet.public.id}"
+	private_ip_address_allocation = "dynamic"
+	public_ip_address_id = "${azurerm_public_ip.director_ip.id}"
+    }
+}
+
+resource "azurerm_virtual_machine" "director" {
+    name = "director"
+    location = "${azurerm_resource_group.RG.location}"
+    resource_group_name = "${azurerm_resource_group.RG.name}"
+    network_interface_ids = ["${azurerm_network_interface.director.id}"]
+
+    os_profile_linux_config {
+	disable_password_authentication = true
+	ssh_keys = {
+	    key_data = "${file("~/.ssh/toby-azure.pub")}"
+	    path = "/home/centos/.ssh/authorized_keys"
+	}
+    }
+    vm_size = "Standard_DS14-8_v2"
+    delete_os_disk_on_termination = true
+    delete_data_disks_on_termination = true
+    os_profile {
+	computer_name = "director"
+	admin_username = "centos"
+    }
+    // Get this using az vm image list --all --publisher Cloudera --offer cloudera-centos-os --sku 7_4
+    storage_image_reference {
+	offer = "cloudera-centos-os",
+	publisher = "cloudera",
+	sku = "7_4",
+	version = "2.0.7"
+    }
+    storage_os_disk {
+	name = "director_root_disk"
+	create_option = "FromImage"
+	disk_size_gb = 100
+    }
+    // Get this using az vm image show --urn cloudera:cloudera-centos-os:7_4:2.0.7
+    plan {
+	name = "7_4",
+	product = "cloudera-centos-os",
+	publisher = "cloudera"
+    }
+
+    connection {
+	type     = "ssh"
+	user     = "centos"
+	private_key = "${file(var.private_key_path)}"
+    }
+
+    provisioner "file" {
+	source = "${path.module}/director_scripts"
+	destination = "/tmp"
+    }
+
+    provisioner "remote-exec" {
+	inline = [
+	    "sudo chmod +x /tmp/director_scripts/*.sh",
+	    "sudo /tmp/director_scripts/install_director.sh http://${var.PROXY_USER}:${var.PROXY_USER_PASSWORD}@${azurerm_network_interface.squid.private_ip_address}:${var.PROXY_PORT}",
+	    "sudo systemctl restart cloudera-director-server"
+	]
+    }    
+}
+
+resource "azurerm_network_interface" "private-test" {
+    name = "private-test-nic"
+    location = "${azurerm_resource_group.RG.location}"
+    resource_group_name = "${azurerm_resource_group.RG.name}"
+
+    ip_configuration {
+	name                          = "private-test-ip"
+	subnet_id                     = "${azurerm_subnet.private.id}"
+	private_ip_address_allocation = "dynamic"
+    }
+}
+
+resource "azurerm_virtual_machine" "private-test" {
+    name = "private-test"
+    location = "${azurerm_resource_group.RG.location}"
+    resource_group_name = "${azurerm_resource_group.RG.name}"
+    network_interface_ids = ["${azurerm_network_interface.private-test.id}"]
+
+    os_profile_linux_config {
+	disable_password_authentication = true
+	ssh_keys = {
+	    key_data = "${file("~/.ssh/toby-azure.pub")}"
+	    path = "/home/centos/.ssh/authorized_keys"
+	}
+    }
+    vm_size = "Standard_DS14-8_v2"
+    delete_os_disk_on_termination = true
+    delete_data_disks_on_termination = true
+    os_profile {
+	computer_name = "private-test"
+	admin_username = "centos"
+    }
+    // Get this using az vm image list --all --publisher Cloudera --offer cloudera-centos-os --sku 7_4
+    storage_image_reference {
+	offer = "cloudera-centos-os",
+	publisher = "cloudera",
+	sku = "7_4",
+	version = "2.0.7"
+    }
+    storage_os_disk {
+	name = "private_test_root_disk"
 	create_option = "FromImage"
 	disk_size_gb = 100
     }
