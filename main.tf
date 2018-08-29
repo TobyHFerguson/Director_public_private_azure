@@ -2,7 +2,7 @@ provider "azurerm" {
 }
 
 resource "azurerm_resource_group" "RG" {
-    name = "Training_2018_RG"
+    name = "Training_2018_RG_2"
     location = "West US 2"
 }
 
@@ -13,31 +13,31 @@ resource "azurerm_network_security_group" "NSG" {
 }
 
 resource "azurerm_network_security_rule" "ssh_inbound" {
-  name                        = "Allow SSH inbound"
-  priority                    = 100
-  direction                   = "Inbound"
-  access                      = "Allow"
-  protocol                    = "Tcp"
-  source_port_range           = "*"
-  destination_port_range      = "22"
-  source_address_prefix       = "*"
-  destination_address_prefix  = "*"
-  resource_group_name         = "${azurerm_resource_group.RG.name}"
-  network_security_group_name = "${azurerm_network_security_group.NSG.name}"
+    name                        = "Allow SSH inbound"
+    priority                    = 100
+    direction                   = "Inbound"
+    access                      = "Allow"
+    protocol                    = "Tcp"
+    source_port_range           = "*"
+    destination_port_range      = "22"
+    source_address_prefix       = "*"
+    destination_address_prefix  = "*"
+    resource_group_name         = "${azurerm_resource_group.RG.name}"
+    network_security_group_name = "${azurerm_network_security_group.NSG.name}"
 }
 
 resource "azurerm_network_security_rule" "proxy_inbound" {
-  name                        = "Allow Proxy inbound"
-  priority                    = 110
-  direction                   = "Inbound"
-  access                      = "Allow"
-  protocol                    = "Tcp"
-  source_port_range           = "*"
-  destination_port_range      = "3128"
-  source_address_prefix       = "*"
-  destination_address_prefix  = "*"
-  resource_group_name         = "${azurerm_resource_group.RG.name}"
-  network_security_group_name = "${azurerm_network_security_group.NSG.name}"
+    name                        = "Allow Proxy inbound"
+    priority                    = 110
+    direction                   = "Inbound"
+    access                      = "Allow"
+    protocol                    = "Tcp"
+    source_port_range           = "*"
+    destination_port_range      = "3128"
+    source_address_prefix       = "*"
+    destination_address_prefix  = "*"
+    resource_group_name         = "${azurerm_resource_group.RG.name}"
+    network_security_group_name = "${azurerm_network_security_group.NSG.name}"
 }
 
 resource "azurerm_virtual_network" "VNET" {
@@ -49,15 +49,15 @@ resource "azurerm_virtual_network" "VNET" {
 }
 
 resource "azurerm_route_table" "private" {
-  name                = "private_route_table"
-  location            = "${azurerm_resource_group.RG.location}"
-  resource_group_name = "${azurerm_resource_group.RG.name}"
+    name                = "private_route_table"
+    location            = "${azurerm_resource_group.RG.location}"
+    resource_group_name = "${azurerm_resource_group.RG.name}"
 
-  route {
-    name           = "Internet"
-    address_prefix = "0.0.0.0/0"
-    next_hop_type  = "none"
-  }
+    route {
+	name           = "Internet"
+	address_prefix = "0.0.0.0/0"
+	next_hop_type  = "none"
+    }
 }
 
 resource "azurerm_subnet" "public" {
@@ -87,15 +87,56 @@ resource "azurerm_public_ip" "squid_ip" {
 
 resource "azurerm_network_interface" "squid" {
     name = "squid-nic"
-  location = "${azurerm_resource_group.RG.location}"
-  resource_group_name = "${azurerm_resource_group.RG.name}"
+    location = "${azurerm_resource_group.RG.location}"
+    resource_group_name = "${azurerm_resource_group.RG.name}"
 
-  ip_configuration {
-    name                          = "squid-ip"
-    subnet_id                     = "${azurerm_subnet.public.id}"
-      private_ip_address_allocation = "dynamic"
-      public_ip_address_id = "${azurerm_public_ip.squid_ip.id}"
-  }
+    ip_configuration {
+	name                          = "squid-ip"
+	subnet_id                     = "${azurerm_subnet.public.id}"
+	private_ip_address_allocation = "dynamic"
+	public_ip_address_id = "${azurerm_public_ip.squid_ip.id}"
+    }
+}
+
+resource "azurerm_virtual_machine" "squid" {
+    name = "squid"
+    location = "${azurerm_resource_group.RG.location}"
+    resource_group_name = "${azurerm_resource_group.RG.name}"
+    network_interface_ids = ["${azurerm_network_interface.squid.id}"]
+
+    os_profile_linux_config {
+	disable_password_authentication = true
+	ssh_keys = {
+	    key_data = "${file("~/.ssh/toby-azure.pub")}"
+	    path = "/home/centos/.ssh/authorized_keys"
+	}
+    }
+    vm_size = "Standard_DS14-8_v2"
+    delete_os_disk_on_termination = true
+    delete_data_disks_on_termination = true
+    os_profile {
+	computer_name = "squid"
+	admin_username = "centos"
+    }
+    // Get this using az vm image list --all --publisher Cloudera --offer cloudera-centos-os --sku 7_4
+    storage_image_reference {
+	offer = "cloudera-centos-os",
+	publisher = "cloudera",
+	sku = "7_4",
+	version = "2.0.7"
+    }
+    storage_os_disk {
+	name = "root_disk"
+	create_option = "FromImage"
+	disk_size_gb = 100
+    }
+    // Get this using az vm image show --urn cloudera:cloudera-centos-os:7_4:2.0.7
+    plan {
+	name = "7_4",
+	product = "cloudera-centos-os",
+	publisher = "cloudera"
+    }
+    
 }
 
 
