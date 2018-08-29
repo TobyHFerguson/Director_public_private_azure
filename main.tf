@@ -3,7 +3,7 @@ provider "azurerm" {
 
 resource "azurerm_resource_group" "RG" {
     name = "${var.RG}"
-    location = "East US"
+    location = "${var.location}"
 }
 
 resource "azurerm_network_security_group" "NSG" {

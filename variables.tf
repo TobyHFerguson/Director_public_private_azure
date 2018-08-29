@@ -1,10 +1,10 @@
 variable RG {
     description = "Resource Group name"
-    default = "trng201808director-rg"
+    default = "trng2018director-rg"
 }
 variable location {
     description = "Azure region"
-    default = "East US"
+    default = "East US 2"
 }
     
 variable VNET {
