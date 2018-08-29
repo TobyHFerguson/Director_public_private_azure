@@ -11,6 +11,12 @@ export http_proxy=${1:?"Missing proxy argument"}
 EOF
 }
 
+# Wait for proxy
+until curl -s ${BASH_REMATCH[1]}://${BASH_REMATCH[4]}:${BASH_REMATCH[5]} 1>&2
+do
+    echo 'Proxy unavailable. Sleeping for 5 seconds'
+    sleep 5
+done
 # Install JDK
 yum -y remove --assumeyes *openjdk*
 rpm -ivh "https://archive.cloudera.com/director/redhat/7/x86_64/director/2/RPMS/x86_64/oracle-j2sdk1.8-1.8.0+update121-1.x86_64.rpm"

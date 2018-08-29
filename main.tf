@@ -154,7 +154,7 @@ resource "azurerm_virtual_machine" "squid" {
 	    "sudo chmod +x /tmp/squid_scripts/*.sh",
 	    "sudo /tmp/squid_scripts/provision_squid.sh ${var.PROXY_USER} ${var.PROXY_USER_PASSWORD} ${var.PROXY_PORT}",
 	    "sudo /tmp/squid_scripts/install_repos.sh",
-	    "sudo su -c 'echo ${azurerm_virtual_network.VNET.address_space[0]} allow >>/etc/chrony.conf'",
+	    "sudo su -c 'echo allow ${azurerm_virtual_network.VNET.address_space[0]} >>/etc/chrony.conf'",
 	    "sudo systemctl restart chronyd"
 	]
     }
